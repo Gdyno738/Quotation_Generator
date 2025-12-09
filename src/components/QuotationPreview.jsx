@@ -47,11 +47,16 @@ export default function QuotationPreview({ form }) {
       <p>Date: {new Date().toLocaleDateString("en-IN")}</p>
 
       <h3 style={{ marginTop: 20 }}>Project Details</h3>
-      <p><b>Project Category:</b> {form.projectCategory || "-"}</p>
-      <p><b>Project Type:</b> {form.projectType || "-"}</p>
+      <p>
+        <b>Project Category:</b> {form.projectCategory || "-"}
+      </p>
+      <p>
+        <b>Project Type:</b> {form.projectType || "-"}
+      </p>
 
       <p style={{ marginTop: "8px" }}>
-        <b>Project Overview:</b><br />
+        <b>Project Overview:</b>
+        <br />
         {form.projectOverview || "No project overview provided."}
       </p>
 

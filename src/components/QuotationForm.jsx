@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import axios from "axios";
 import logo from "../assets/nebulytix-logo.png";
 import stampImage from "../assets/stamp.jpg";
 
@@ -26,10 +27,12 @@ export default function QuotationForm({ form, setForm }) {
     setForm((prev) => ({ ...prev, [section]: updated }));
   };
 
-  const devTotal = form.development.reduce(
-    (sum, row) => sum + Number(row.cost || 0),
-    0
-  );
+  const devTotal = form.development.reduce((sum, row) => {
+    const fixed = Number(row.cost || 0);
+    const hourly = Number(row.hours || 0) * Number(row.rate || 0);
+    const total = fixed > 0 ? fixed : hourly;
+    return sum + total;
+  }, 0);
 
   const usersTotal = form.users.reduce(
     (sum, row) => Number(row.count || 0) * Number(row.price || 0) + sum,
@@ -64,181 +67,288 @@ export default function QuotationForm({ form, setForm }) {
     }
   }, []);
 
-  // ---------------------- PDF GENERATION ----------------------
- // ---------------------- PDF GENERATION ----------------------
-const downloadPDF = () => {
-  const pdf = new jsPDF("p", "mm", "a4");
+ 
 
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const date = new Date().toLocaleDateString("en-IN");
+  const downloadPDF = () => {
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const date = new Date().toLocaleDateString("en-IN");
 
-  try {
-    pdf.addImage(logo, "PNG", 10, 5, 45, 18);
-  } catch {}
+    // ---------------- HEADER FUNCTION ----------------
+    const addPageHeader = () => {
+      pdf.addImage(logo, "PNG", 10, 5, 45, 18);
 
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(20);
-  pdf.text("QUOTATION", pageWidth / 2, 18, { align: "center" });
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(20);
+      pdf.text("QUOTATION", pageWidth / 2, 14, { align: "center" });
 
-  pdf.setFontSize(11);
-  pdf.text(`Quotation No: ${form.quotationNumber}`, pageWidth - 10, 10, { align: "right" });
-  pdf.text(`Date: ${date}`, pageWidth - 10, 16, { align: "right" });
+      pdf.setFontSize(11);
+      pdf.text(`Quotation No: ${form.quotationNumber}`, pageWidth - 10, 10, {
+        align: "right",
+      });
+      pdf.text(`Date: ${date}`, pageWidth - 10, 16, { align: "right" });
 
-  pdf.line(10, 25, pageWidth - 10, 25);
+      pdf.line(10, 25, pageWidth - 10, 25);
+    };
 
-// ---------------- COMPANY + CLIENT DETAILS IN TWO COLUMNS ----------------
-pdf.setFont("helvetica", "bold");
-pdf.setFontSize(13);
-pdf.text("Company Details", 10, 32);
+    // CALL HEADER FOR FIRST PAGE
+    addPageHeader();
 
-pdf.setFont("helvetica", "normal");
-pdf.setFontSize(11);
+    // ---------------- COMPANY + CLIENT DETAILS IN TWO COLUMNS ----------------
 
-let leftY = 38;
-
-// LEFT COLUMN — COMPANY
-pdf.text(`Company: ${form.companyName || "-"}`, 10, leftY);
-pdf.text(`Address: ${form.companyAddress || "-"}`, 10, leftY + 6);
-pdf.text(`Email: ${form.companyEmail || "-"}`, 10, leftY + 12);
-pdf.text(`Phone: ${form.companyPhone || "-"}`, 10, leftY + 18);
-
-// RIGHT COLUMN — CLIENT
-pdf.setFont("helvetica", "bold");
-pdf.text("Client Details", pageWidth / 2, 32);
-
-pdf.setFont("helvetica", "normal");
-pdf.text(`Client: ${form.clientName || "-"}`, pageWidth / 2, leftY);
-pdf.text(`Email: ${form.clientEmail || "-"}`, pageWidth / 2, leftY + 6);
-pdf.text(`Phone: ${form.clientPhone || "-"}`, pageWidth / 2, leftY + 12);
-pdf.text(`Project: ${form.projectName || "-"}`, pageWidth / 2, leftY + 18);
-
-// Separator line
-const detailEndY = leftY + 26;
-pdf.line(10, detailEndY, pageWidth - 10, detailEndY);
-
-// IMPORTANT: Correct Y start for Project Details
-let y = detailEndY + 10;
-
-
+    // HEADERS — SAME SIZE + SAME BOLD
     pdf.setFont("helvetica", "bold");
-    pdf.text("Project Details", 10, y);
+    pdf.setFontSize(13);
+    pdf.text("COMPANY DETAILS", 10, 32);
+
+    pdf.text("CLIENT DETAILS", pageWidth / 2, 32);
+
+    // BODY TEXT — same style for both
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(11);
+
+    let leftY = 38;
+
+    // LEFT COLUMN — COMPANY
+    pdf.text(`Company : ${form.companyName || "-"}`, 10, leftY);
+    pdf.text(`Address : ${form.companyAddress || "-"}`, 10, leftY + 6);
+    pdf.text(`Email : ${form.companyEmail || "-"}`, 10, leftY + 12);
+    pdf.text(`Phone : ${form.companyPhone || "-"}`, 10, leftY + 18);
+
+    // RIGHT COLUMN — CLIENT
+    pdf.text(`Client : ${form.clientName || "-"}`, pageWidth / 2, leftY);
+    pdf.text(`Email : ${form.clientEmail || "-"}`, pageWidth / 2, leftY + 6);
+    pdf.text(`Phone : ${form.clientPhone || "-"}`, pageWidth / 2, leftY + 12);
+    pdf.text(`Project : ${form.projectName || "-"}`, pageWidth / 2, leftY + 18);
+
+    // Separator line
+    const detailEndY = leftY + 26;
+    pdf.line(10, detailEndY, pageWidth - 10, detailEndY);
+
+    // IMPORTANT: Correct Y start for Project Details
+    let y = detailEndY + 10;
+
+    // ---------------- PAGE BREAK HANDLER ----------------
+    const ensureSpace = (neededHeight = 20) => {
+      if (y + neededHeight > pageHeight - 20) {
+        pdf.addPage();
+        addPageHeader();
+        y = 35; // reset below header
+      }
+    };
+
+    // ---------------- PROJECT DETAILS ----------------
+    ensureSpace(30);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("PROJECT DETAILS", 10, y);
+    y += 8;
 
     pdf.setFont("helvetica", "normal");
-    y += 8;
-    pdf.text(`Project Category: ${form.projectCategory || "-"}`, 10, y);
+    pdf.text(`Project Category : ${form.projectCategory || "-"}`, 10, y);
     y += 6;
-    pdf.text(`Project Type: ${form.projectType || "-"}`, 10, y);
+    pdf.text(`Project Type : ${form.projectType || "-"}`, 10, y);
+    y += 10;
 
-    y += 6;
-    
+    // ---------------- DEVELOPMENT TABLE ----------------
+    ensureSpace(20);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("DEVELOPMENT COSTS", 10, y);
 
-    // Development Costs Table
-    pdf.text("Development Costs", 10, y + 8);
     autoTable(pdf, {
-      startY: y + 12,
-      head: [["Task", "Cost (INR)"]],
-      body: form.development.map((row) => [row.label, row.cost]),
+      startY: y + 4,
+      head: [["TASK", "COST", "HOURS", "RATE", "TOTAL"]],
+      body: form.development.map((row) => {
+        const fixed = Number(row.cost || 0);
+        const hourly = Number(row.hours || 0) * Number(row.rate || 0);
+        const total = fixed > 0 ? fixed : hourly;
+
+        return [
+          row.label,
+          row.cost || "-",
+          row.hours || "-",
+          row.rate || "-",
+          total,
+        ];
+      }),
+      didDrawPage: () => addPageHeader(),
     });
 
-    // User Pricing Table
-    pdf.text("User Pricing", 10, pdf.lastAutoTable.finalY + 8);
+    y = pdf.lastAutoTable.finalY + 10;
+
+    // ---------------- USER PRICING TABLE ----------------
+    ensureSpace(20);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("USER PRICING", 10, y);
+
     autoTable(pdf, {
-      startY: pdf.lastAutoTable.finalY + 12,
-      head: [["Users", "Price", "Total"]],
+      startY: y + 4,
+      head: [["USERS", "PRICE", "TOTAL"]],
       body: form.users.map((row) => [
         row.count,
         row.price,
         Number(row.count) * Number(row.price),
       ]),
+      didDrawPage: () => addPageHeader(),
     });
 
-    // Additional Costs Table
-    pdf.text("Additional Costs", 10, pdf.lastAutoTable.finalY + 8);
+    y = pdf.lastAutoTable.finalY + 10;
+
+    // ---------------- ADDITIONAL COSTS TABLE ----------------
+    ensureSpace(20);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("ADDITIONAL COSTS", 10, y);
+
     autoTable(pdf, {
-      startY: pdf.lastAutoTable.finalY + 12,
+      startY: y + 4,
       head: [["Description", "Cost"]],
       body: form.additionalCosts.map((row) => [row.label, row.cost]),
+      didDrawPage: () => addPageHeader(),
     });
 
-// ---------------------- TOTAL SECTION ----------------------
-let totalY = pdf.lastAutoTable.finalY + 5;
+    y = pdf.lastAutoTable.finalY + 10;
 
-pdf.setFont("helvetica", "bold");
-pdf.setFontSize(12);
+    // ---------------- TOTAL SECTION ----------------
+    ensureSpace(40);
 
-// Subtotal
-pdf.text(`Subtotal: INR ${grandSubtotal}`, pageWidth - 12, totalY, {
-  align: "right",
-});
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
 
-// GST Line
-pdf.text(
-  `GST (${form.gstPercent || 0}%): INR ${gst.toFixed(2)}`,
-  pageWidth - 12,
-  totalY + 8,
-  { align: "right" }
-);
+    pdf.text(`Sub-Total : INR ${grandSubtotal}`, pageWidth - 12, y, {
+      align: "right",
+    });
+    pdf.text(
+      `GST (${form.gstPercent || 0}%) : INR ${gst.toFixed(2)}`,
+      pageWidth - 12,
+      y + 8,
+      { align: "right" }
+    );
 
-// GST label logic
-let gstLabel = " (Excluding GST)";
-if (form.gstPercent && Number(form.gstPercent) > 0) {
-  gstLabel = " (Including GST)";
-}
+    let gstLabel =
+      Number(form.gstPercent) > 0 ? " (Including GST)" : " (Excluding GST)";
 
-// Total with GST + Label
-pdf.text(
-  `Total Amount: INR ${totalWithGst.toFixed(2)}${gstLabel}`,
-  pageWidth - 12,
-  totalY + 17,
-  { align: "right" }
-);
+    pdf.text(
+      `Total Amount : INR ${totalWithGst.toFixed(2)}${gstLabel}`,
+      pageWidth - 12,
+      y + 17,   
+      { align: "right" }
+    );
 
-// ---------------------- PAYMENT TERMS (CLOSER UP) ----------------------
-pdf.setFont("helvetica", "normal");
-pdf.setFontSize(11);
-let paymentY = totalY + 15;
-pdf.text(`Payment Terms: ${form.paymentTerms}`, 10, paymentY);
+    y += 28;
 
-// ---------------------- DYNAMIC STAMP POSITION ----------------------
-const stampSize = 25;
+    // ---------------- PAYMENT TERMS ----------------
+    // ensureSpace(20);
+    // pdf.setFont("helvetica", "normal");
+    // pdf.setFontSize(11);
+    // pdf.text(`Payment Terms: ${form.paymentTerms}`, 10, y);
 
+    // y += 20;
+    ensureSpace(20);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(11);
 
-// stamp should appear AFTER: totals + payment terms
-let stampY = paymentY + 20; // push slightly downward
+    let paymentY = y + 15;
 
-// If stamp goes off the page bottom, lift it up
-if (stampY + stampSize > pageHeight - 20) {
-  stampY = pageHeight - stampSize - 20;
-}
+    pdf.text("PAYMENT TERMS :", 10, paymentY);
 
-try {
-  pdf.addImage(stampImage, "PNG", pageWidth - 40, stampY, stampSize, stampSize);
-} catch {}
+    let lines = form.paymentTerms.split("\n");
 
-// Signature text below stamp
-pdf.setFont("helvetica", "bold");
-pdf.setFontSize(10);
-pdf.text("Authorized Signature", pageWidth - 45, stampY + stampSize + 6);
+    lines.forEach((line, index) => {
+      pdf.text(line, 10, paymentY + 6 * (index + 1));
+    });
 
-// ---------------------- TERMS & CONDITIONS (BOTTOM LEFT) ----------------------
-pdf.setFont("helvetica", "italic");
-pdf.setFontSize(9);
+    // ---------------- STAMP + SIGNATURE ----------------
+    ensureSpace(40);
 
-let termsY = pageHeight - 10;
+    pdf.addImage(stampImage, "PNG", pageWidth - 40, y, 25, 25);
 
-// If stamp is too low, move terms text up safely
-if (stampY + stampSize + 10 > termsY) {
-  termsY = stampY + stampSize + 15;
-}
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(10);
+    pdf.text("Authorized Signature", pageWidth - 45, y + 34);
 
-pdf.text("*Terms and conditions apply", 10, termsY);
+    y += 45;
 
-
+    // ---------------- TERMS & CONDITIONS ----------------
+    pdf.setFont("helvetica", "italic");
+    pdf.setFontSize(9);
+    pdf.text("*Terms and conditions apply", 10, pageHeight - 10);
 
     pdf.save(`Quotation_${form.clientName}.pdf`);
+  };
 
-    
+  // ---------------------- SAVE TO DATABASE (JAVA BACKEND) ----------------------
+  const saveToDatabase = async () => {
+    try {
+      // Prepare the data to send to Java backend
+      const quotationData = {
+        quotationNumber: form.quotationNumber,
+        quotationDate: new Date().toISOString().split("T")[0],
+
+        // Company Details
+        companyName: form.companyName,
+        companyAddress: form.companyAddress,
+        companyEmail: form.companyEmail,
+        companyPhone: form.companyPhone,
+
+        // Client Details
+        clientName: form.clientName,
+        clientEmail: form.clientEmail,
+        clientPhone: form.clientPhone,
+        projectName: form.projectName,
+
+        // Project Information
+        projectCategory: form.projectCategory,
+        projectType: form.projectType,
+
+        // Development Costs
+        development: form.development,
+
+        // User Pricing
+        users: form.users,
+
+        // Additional Costs
+        additionalCosts: form.additionalCosts,
+
+        // Financial Details
+        gstPercent: Number(form.gstPercent || 0),
+        subtotal: grandSubtotal,
+        gstAmount: gst,
+        totalAmount: totalWithGst,
+        paymentTerms: form.paymentTerms,
+
+        // Add status
+        status: "PENDING",
+      };
+
+      // Send POST request to your Java backend
+      const response = await axios.post(
+        "http://localhost:7070/api/quotations/save", // Update this with your Java backend URL
+        quotationData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.status === 200 || response.status === 201) {
+        alert("✅ Quotation saved to database successfully!");
+        console.log("Response from backend:", response.data);
+      }
+    } catch (error) {
+      console.error("Error saving to database:", error);
+      if (error.response) {
+        alert(
+          `❌ Error: ${
+            error.response.data?.message || "Failed to save quotation"
+          }`
+        );
+      } else {
+        alert(
+          "❌ Error connecting to backend. Make sure Java server is running."
+        );
+      }
+    }
   };
 
   // UI Styles (unchanged)
@@ -298,25 +408,69 @@ pdf.text("*Terms and conditions apply", 10, termsY);
       {/* Company Section */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Company Details</h3>
-        <input name="companyName" placeholder="Company Name" style={styles.input} onChange={updateField} />
-        <input name="companyAddress" placeholder="Address" style={styles.input} onChange={updateField} />
-        <input name="companyEmail" placeholder="Email" style={styles.input} onChange={updateField} />
-        <input name="companyPhone" placeholder="Phone" style={styles.input} onChange={updateField} />
+        <input
+          name="companyName"
+          placeholder="Company Name"
+          style={styles.input}
+          onChange={updateField}
+        />
+        <input
+          name="companyAddress"
+          placeholder="Address"
+          style={styles.input}
+          onChange={updateField}
+        />
+        <input
+          name="companyEmail"
+          placeholder="Email"
+          style={styles.input}
+          onChange={updateField}
+        />
+        <input
+          name="companyPhone"
+          placeholder="Phone"
+          style={styles.input}
+          onChange={updateField}
+        />
       </div>
 
       {/* Client Section */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Client Details</h3>
-        <input name="clientName" placeholder="Client Name" style={styles.input} onChange={updateField} />
-        <input name="clientEmail" placeholder="Client Email" style={styles.input} onChange={updateField} />
-        <input name="clientPhone" placeholder="Client Phone" style={styles.input} onChange={updateField} />
-        <input name="projectName" placeholder="Project Name" style={styles.input} onChange={updateField} />
+        <input
+          name="clientName"
+          placeholder="Client Name"
+          style={styles.input}
+          onChange={updateField}
+        />
+        <input
+          name="clientEmail"
+          placeholder="Client Email"
+          style={styles.input}
+          onChange={updateField}
+        />
+        <input
+          name="clientPhone"
+          placeholder="Client Phone"
+          style={styles.input}
+          onChange={updateField}
+        />
+        <input
+          name="projectName"
+          placeholder="Project Name"
+          style={styles.input}
+          onChange={updateField}
+        />
       </div>
 
       {/* Project Info */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Project Information</h3>
-        <select name="projectCategory" style={styles.input} onChange={updateField}>
+        <select
+          name="projectCategory"
+          style={styles.input}
+          onChange={updateField}
+        >
           <option value="">Select Category</option>
           <option value="Mobile Application">Mobile Application</option>
           <option value="E-Commerce Website">E-Commerce Website</option>
@@ -325,7 +479,12 @@ pdf.text("*Terms and conditions apply", 10, termsY);
           <option value="Custom Software">Custom Software</option>
         </select>
 
-        <input name="projectType" placeholder="Project Type" style={styles.input} onChange={updateField} />
+        <input
+          name="projectType"
+          placeholder="Project Type"
+          style={styles.input}
+          onChange={updateField}
+        />
       </div>
 
       {/* Development Costs */}
@@ -333,24 +492,71 @@ pdf.text("*Terms and conditions apply", 10, termsY);
         <h3 style={styles.sectionTitle}>Development Costs</h3>
 
         {form.development.map((row, i) => (
-          <div key={i} style={styles.row}>
+          <div
+            key={i}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr 1fr 1fr auto",
+              gap: "12px",
+            }}
+          >
+            {/* Description */}
             <input
               placeholder="Description"
               value={row.label}
               style={styles.input}
-              onChange={(e) => updateRow("development", i, "label", e.target.value)}
+              onChange={(e) =>
+                updateRow("development", i, "label", e.target.value)
+              }
             />
+
+            {/* Fixed Cost */}
             <input
-              placeholder="Cost"
+              placeholder="Cost (optional)"
               value={row.cost}
               style={styles.input}
-              onChange={(e) => updateRow("development", i, "cost", e.target.value)}
+              type="number"
+              onChange={(e) =>
+                updateRow("development", i, "cost", e.target.value)
+              }
             />
-            <button style={styles.deleteBtn} onClick={() => deleteRow("development", i)}>🗑️</button>
+
+            {/* Hours */}
+            <input
+              placeholder="Hours"
+              value={row.hours}
+              style={styles.input}
+              type="number"
+              onChange={(e) =>
+                updateRow("development", i, "hours", e.target.value)
+              }
+            />
+
+            {/* Rate */}
+            <input
+              placeholder="Rate/hr"
+              value={row.rate}
+              style={styles.input}
+              type="number"
+              onChange={(e) =>
+                updateRow("development", i, "rate", e.target.value)
+              }
+            />
+
+            {/* Delete */}
+            <button
+              style={styles.deleteBtn}
+              onClick={() => deleteRow("development", i)}
+            >
+              🗑
+            </button>
           </div>
         ))}
 
-        <button style={styles.buttonAdd} onClick={() => addRow("development", { label: "", cost: "" })}>
+        <button
+          style={styles.buttonAdd}
+          onClick={() => addRow("development", { label: "", cost: "" })}
+        >
           + Add Development Item
         </button>
       </div>
@@ -373,11 +579,19 @@ pdf.text("*Terms and conditions apply", 10, termsY);
               style={styles.input}
               onChange={(e) => updateRow("users", i, "price", e.target.value)}
             />
-            <button style={styles.deleteBtn} onClick={() => deleteRow("users", i)}>🗑️</button>
+            <button
+              style={styles.deleteBtn}
+              onClick={() => deleteRow("users", i)}
+            >
+              🗑️
+            </button>
           </div>
         ))}
 
-        <button style={styles.buttonAdd} onClick={() => addRow("users", { count: "", price: "" })}>
+        <button
+          style={styles.buttonAdd}
+          onClick={() => addRow("users", { count: "", price: "" })}
+        >
           + Add User Pricing
         </button>
       </div>
@@ -392,19 +606,31 @@ pdf.text("*Terms and conditions apply", 10, termsY);
               placeholder="Description"
               value={row.label}
               style={styles.input}
-              onChange={(e) => updateRow("additionalCosts", i, "label", e.target.value)}
+              onChange={(e) =>
+                updateRow("additionalCosts", i, "label", e.target.value)
+              }
             />
             <input
               placeholder="Cost"
               value={row.cost}
               style={styles.input}
-              onChange={(e) => updateRow("additionalCosts", i, "cost", e.target.value)}
+              onChange={(e) =>
+                updateRow("additionalCosts", i, "cost", e.target.value)
+              }
             />
-            <button style={styles.deleteBtn} onClick={() => deleteRow("additionalCosts", i)}>🗑️</button>
+            <button
+              style={styles.deleteBtn}
+              onClick={() => deleteRow("additionalCosts", i)}
+            >
+              🗑️
+            </button>
           </div>
         ))}
 
-        <button style={styles.buttonAdd} onClick={() => addRow("additionalCosts", { label: "", cost: "" })}>
+        <button
+          style={styles.buttonAdd}
+          onClick={() => addRow("additionalCosts", { label: "", cost: "" })}
+        >
           + Add Additional Cost
         </button>
       </div>
@@ -412,7 +638,13 @@ pdf.text("*Terms and conditions apply", 10, termsY);
       {/* GST & Terms */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>GST & Payment Terms</h3>
-        <input name="gstPercent" placeholder="GST %" style={styles.input} onChange={updateField} />
+        <input
+          name="gstPercent"
+          placeholder="GST %"
+          style={styles.input}
+          onChange={updateField}
+        />
+
         <textarea
           name="paymentTerms"
           placeholder="Payment Terms"
@@ -431,10 +663,27 @@ pdf.text("*Terms and conditions apply", 10, termsY);
           border: "none",
           cursor: "pointer",
           fontSize: "18px",
+          marginBottom: "12px",
         }}
         onClick={downloadPDF}
       >
         Generate PDF
+      </button>
+
+      <button
+        style={{
+          width: "100%",
+          background: "#10b981",
+          color: "white",
+          padding: "15px",
+          borderRadius: "10px",
+          border: "none",
+          cursor: "pointer",
+          fontSize: "18px",
+        }}
+        onClick={saveToDatabase}
+      >
+        💾 Save to Database
       </button>
     </div>
   );
