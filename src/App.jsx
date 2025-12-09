@@ -17,7 +17,7 @@ export default function App() {
     projectType: "",
     projectOverview: "",
 
-    development: [{ label: "", cost: "" }],
+    development: [{ label: "", cost: "", hours: "", rate: "" }],
     users: [{ count: "", price: "" }],
     additionalCosts: [{ label: "", cost: "" }],
 
@@ -104,7 +104,8 @@ export default function App() {
     },
   };
 
-  const isLargeScreen = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const isLargeScreen =
+    typeof window !== "undefined" && window.innerWidth >= 1024;
 
   return (
     <div style={styles.page}>
@@ -113,7 +114,6 @@ export default function App() {
 
         {/* Responsive Layout */}
         <div style={isLargeScreen ? styles.layoutLarge : styles.layout}>
-          
           {/* LEFT COLUMN — FORM */}
           <div style={{ ...styles.card, ...styles.formBox }}>
             <QuotationForm form={form} setForm={setForm} />
@@ -128,7 +128,6 @@ export default function App() {
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </div>
