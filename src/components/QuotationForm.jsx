@@ -3,8 +3,10 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import logo from "../assets/nebulytix-logo.png";
 import stampImage from "../assets/stamp.jpg";
+import { Trash2, PlusCircle } from "lucide-react";
 
 export default function QuotationForm({ form, setForm }) {
+
   const updateField = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
@@ -26,25 +28,6 @@ export default function QuotationForm({ form, setForm }) {
     setForm((prev) => ({ ...prev, [section]: updated }));
   };
 
-  const devTotal = form.development.reduce(
-    (sum, row) => sum + Number(row.cost || 0),
-    0
-  );
-
-  const usersTotal = form.users.reduce(
-    (sum, row) => Number(row.count || 0) * Number(row.price || 0) + sum,
-    0
-  );
-
-  const additionalTotal = form.additionalCosts.reduce(
-    (sum, row) => sum + Number(row.cost || 0),
-    0
-  );
-
-  const grandSubtotal = devTotal + usersTotal + additionalTotal;
-  const gst = (grandSubtotal * Number(form.gstPercent || 0)) / 100;
-  const totalWithGst = grandSubtotal + gst;
-
   const generateQuotationNumber = () => {
     const now = new Date();
     return `QTN-${now.getFullYear()}${String(now.getMonth() + 1).padStart(
@@ -64,258 +47,451 @@ export default function QuotationForm({ form, setForm }) {
     }
   }, []);
 
-  // ---------------------- PDF GENERATION ----------------------
- // ---------------------- PDF GENERATION ----------------------
-const downloadPDF = () => {
-  const pdf = new jsPDF("p", "mm", "a4");
+  // ============================================================
+  //                  PDF GENERATION (FULLY FIXED)
+  // ============================================================
 
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const date = new Date().toLocaleDateString("en-IN");
+  const downloadPDF = () => {
 
-  try {
-    pdf.addImage(logo, "PNG", 10, 5, 45, 18);
-  } catch {}
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const date = new Date().toLocaleDateString("en-IN");
 
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(20);
-  pdf.text("QUOTATION", pageWidth / 2, 18, { align: "center" });
+    const HEADER_BOTTOM_Y = 25;
+    const BOTTOM_MARGIN = 20;
 
-  pdf.setFontSize(11);
-  pdf.text(`Quotation No: ${form.quotationNumber}`, pageWidth - 10, 10, { align: "right" });
-  pdf.text(`Date: ${date}`, pageWidth - 10, 16, { align: "right" });
+    const addPageHeader = () => {
+      try { pdf.addImage(logo, "PNG", 10, 5, 45, 18); } catch {}
 
-  pdf.line(10, 25, pageWidth - 10, 25);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(20);
+      pdf.text("QUOTATION", pageWidth / 2, 14, { align: "center" });
 
-// ---------------- COMPANY + CLIENT DETAILS IN TWO COLUMNS ----------------
-pdf.setFont("helvetica", "bold");
-pdf.setFontSize(13);
-pdf.text("Company Details", 10, 32);
+      pdf.setFontSize(11);
+      pdf.text(`Quotation No: ${form.quotationNumber}`, pageWidth - 10, 10, { align: "right" });
+      pdf.text(`Date: ${date}`, pageWidth - 10, 16, { align: "right" });
 
-pdf.setFont("helvetica", "normal");
-pdf.setFontSize(11);
+      pdf.line(10, HEADER_BOTTOM_Y, pageWidth - 10, HEADER_BOTTOM_Y);
+    };
 
-let leftY = 38;
+    addPageHeader();
+    let y = HEADER_BOTTOM_Y + 10;
 
-// LEFT COLUMN — COMPANY
-pdf.text(`Company: ${form.companyName || "-"}`, 10, leftY);
-pdf.text(`Address: ${form.companyAddress || "-"}`, 10, leftY + 6);
-pdf.text(`Email: ${form.companyEmail || "-"}`, 10, leftY + 12);
-pdf.text(`Phone: ${form.companyPhone || "-"}`, 10, leftY + 18);
+    const ensureSpace = (need = 20) => {
+      if (y + need > pageHeight - BOTTOM_MARGIN) {
+        pdf.addPage();
+        addPageHeader();
+        y = HEADER_BOTTOM_Y + 10;
+      }
+    };
 
-// RIGHT COLUMN — CLIENT
-pdf.setFont("helvetica", "bold");
-pdf.text("Client Details", pageWidth / 2, 32);
+    // ============================================================
+    //                      COMPANY + CLIENT DETAILS
+    // ============================================================
 
-pdf.setFont("helvetica", "normal");
-pdf.text(`Client: ${form.clientName || "-"}`, pageWidth / 2, leftY);
-pdf.text(`Email: ${form.clientEmail || "-"}`, pageWidth / 2, leftY + 6);
-pdf.text(`Phone: ${form.clientPhone || "-"}`, pageWidth / 2, leftY + 12);
-pdf.text(`Project: ${form.projectName || "-"}`, pageWidth / 2, leftY + 18);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(13);
 
-// Separator line
-const detailEndY = leftY + 26;
-pdf.line(10, detailEndY, pageWidth - 10, detailEndY);
+    const LEFT = 10;
+    const RIGHT = pageWidth - 100;
 
-// IMPORTANT: Correct Y start for Project Details
-let y = detailEndY + 10;
+    pdf.text("Company Details", LEFT, y);
+    pdf.text("Client Details", RIGHT, y);
 
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(11);
+    y += 6;
 
+    pdf.text(`Company: ${form.companyName || "-"}`, LEFT, y);
+    pdf.text(`Client: ${form.clientName || "-"}`, RIGHT, y);
+
+    y += 6;
+    pdf.text(`Address: ${form.companyAddress || "-"}`, LEFT, y);
+    pdf.text(`Email: ${form.clientEmail || "-"}`, RIGHT, y);
+
+    y += 6;
+    pdf.text(`Email: ${form.companyEmail || "-"}`, LEFT, y);
+    pdf.text(`Phone: ${form.clientPhone || "-"}`, RIGHT, y);
+
+    y += 6;
+    pdf.text(`Phone: ${form.companyPhone || "-"}`, LEFT, y);
+    pdf.text(`Project: ${form.projectName || "-"}`, RIGHT, y);
+
+    y += 10;
+    pdf.line(10, y, pageWidth - 10, y);
+    y += 10;
+
+    // ============================================================
+    //                          PROJECT DETAILS
+    // ============================================================
+
+    ensureSpace(20);
     pdf.setFont("helvetica", "bold");
     pdf.text("Project Details", 10, y);
 
     pdf.setFont("helvetica", "normal");
     y += 8;
     pdf.text(`Project Category: ${form.projectCategory || "-"}`, 10, y);
+
     y += 6;
     pdf.text(`Project Type: ${form.projectType || "-"}`, 10, y);
 
-    y += 6;
-    
+    y += 12;
 
-    // Development Costs Table
-    pdf.text("Development Costs", 10, y + 8);
+    // ============================================================
+    //                      DEVELOPMENT TABLE (FIXED)
+    // ============================================================
+
+    ensureSpace(30);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Development Costs", 10, y);
+
     autoTable(pdf, {
-      startY: y + 12,
-      head: [["Task", "Cost (INR)"]],
-      body: form.development.map((row) => [row.label, row.cost]),
+      startY: y + 4,
+
+      head: [["Task", "Cost", "Hours", "Rate", "Total"]],
+      body: form.development.map((row) => {
+        const fixed = Number(row.cost || 0);
+        const hourly = Number(row.hours || 0) * Number(row.rate || 0);
+        const total = fixed > 0 ? fixed : hourly;
+        return [
+          row.label || "-",
+          row.cost || "-",
+          row.hours || "-",
+          row.rate || "-",
+          total || "-"
+        ];
+      }),
+
+      margin: { left: 10, right: 10 },
+      tableWidth: pageWidth - 20,
+
+      columnStyles: {
+        0: { halign: "left", cellWidth: 70 },
+        1: { halign: "right", cellWidth: 25 },
+        2: { halign: "right", cellWidth: 25 },
+        3: { halign: "right", cellWidth: 25 },
+        4: { halign: "right", cellWidth: 25 },
+      },
+
+      headStyles: { fillColor: [0, 102, 170], halign: "center" },
+      styles: { fontSize: 10 },
+
+      didDrawPage: (data) => {
+        if (data.pageNumber > 1) addPageHeader();
+      }
     });
 
-    // User Pricing Table
-    pdf.text("User Pricing", 10, pdf.lastAutoTable.finalY + 8);
+    y = pdf.lastAutoTable.finalY + 12;
+
+    // ============================================================
+    //                      USER PRICING TABLE (FIXED)
+    // ============================================================
+
+    ensureSpace(25);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("User Pricing", 10, y);
+
     autoTable(pdf, {
-      startY: pdf.lastAutoTable.finalY + 12,
+      startY: y + 4,
+
       head: [["Users", "Price", "Total"]],
       body: form.users.map((row) => [
-        row.count,
-        row.price,
-        Number(row.count) * Number(row.price),
+        row.count || "-",
+        row.price || "-",
+        Number(row.count || 0) * Number(row.price || 0) || "-"
       ]),
+
+      margin: { left: 10, right: 10 },
+      tableWidth: pageWidth - 20,
+
+      columnStyles: {
+        0: { halign: "right", cellWidth: 60 },
+        1: { halign: "right", cellWidth: 60 },
+        2: { halign: "right", cellWidth: 60 },
+      },
+
+      headStyles: { fillColor: [0, 102, 170], halign: "center" },
+      styles: { fontSize: 10 },
+
+      didDrawPage: (data) => {
+        if (data.pageNumber > 1) addPageHeader();
+      }
     });
 
-    // Additional Costs Table
-    pdf.text("Additional Costs", 10, pdf.lastAutoTable.finalY + 8);
+    y = pdf.lastAutoTable.finalY + 12;
+
+    // ============================================================
+    //                  ADDITIONAL COSTS TABLE (FIXED)
+    // ============================================================
+
+    ensureSpace(25);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Additional Costs", 10, y);
+
     autoTable(pdf, {
-      startY: pdf.lastAutoTable.finalY + 12,
+      startY: y + 4,
+
       head: [["Description", "Cost"]],
-      body: form.additionalCosts.map((row) => [row.label, row.cost]),
+      body: form.additionalCosts.map((row) => [
+        row.label || "-",
+        row.cost || "-",
+      ]),
+
+      margin: { left: 10, right: 10 },
+      tableWidth: pageWidth - 20,
+
+      columnStyles: {
+        0: { halign: "left", cellWidth: 90 },
+        1: { halign: "right", cellWidth: 50 },
+      },
+
+      headStyles: { fillColor: [0, 102, 170], halign: "center" },
+      styles: { fontSize: 10 },
+
+      didDrawPage: (data) => {
+        if (data.pageNumber > 1) addPageHeader();
+      }
     });
 
-// ---------------------- TOTAL SECTION ----------------------
-let totalY = pdf.lastAutoTable.finalY + 5;
+    y = pdf.lastAutoTable.finalY + 20;
 
-pdf.setFont("helvetica", "bold");
-pdf.setFontSize(12);
+    // ============================================================
+    //                        TOTALS SECTION
+    // ============================================================
 
-// Subtotal
-pdf.text(`Subtotal: INR ${grandSubtotal}`, pageWidth - 12, totalY, {
-  align: "right",
-});
+    const devTotal = form.development.reduce((s, r) => {
+      const fixed = Number(r.cost || 0);
+      const hourly = Number(r.hours || 0) * Number(r.rate || 0);
+      return s + (fixed > 0 ? fixed : hourly);
+    }, 0);
 
-// GST Line
-pdf.text(
-  `GST (${form.gstPercent || 0}%): INR ${gst.toFixed(2)}`,
-  pageWidth - 12,
-  totalY + 8,
-  { align: "right" }
-);
+    const usersTotal = form.users.reduce(
+      (s, r) => s + Number(r.count || 0) * Number(r.price || 0), 0
+    );
 
-// GST label logic
-let gstLabel = " (Excluding GST)";
-if (form.gstPercent && Number(form.gstPercent) > 0) {
-  gstLabel = " (Including GST)";
-}
+    const additionalTotal = form.additionalCosts.reduce(
+      (s, r) => s + Number(r.cost || 0), 0
+    );
 
-// Total with GST + Label
-pdf.text(
-  `Total Amount: INR ${totalWithGst.toFixed(2)}${gstLabel}`,
-  pageWidth - 12,
-  totalY + 17,
-  { align: "right" }
-);
+    const grandSubtotal = devTotal + usersTotal + additionalTotal;
+    const gst = (grandSubtotal * Number(form.gstPercent || 0)) / 100;
+    const totalWithGst = grandSubtotal + gst;
 
-// ---------------------- PAYMENT TERMS (CLOSER UP) ----------------------
-pdf.setFont("helvetica", "normal");
-pdf.setFontSize(11);
-let paymentY = totalY + 15;
-pdf.text(`Payment Terms: ${form.paymentTerms}`, 10, paymentY);
+    ensureSpace(25);
 
-// ---------------------- DYNAMIC STAMP POSITION ----------------------
-const stampSize = 25;
+    pdf.setFont("helvetica", "bold");
+    pdf.text(`Subtotal: Rs ${grandSubtotal}`, pageWidth - 12, y, { align: "right" });
 
+    y += 8;
+    pdf.text(`GST (${form.gstPercent || 0}%): Rs ${gst.toFixed(2)}`, pageWidth - 12, y, { align: "right" });
 
-// stamp should appear AFTER: totals + payment terms
-let stampY = paymentY + 20; // push slightly downward
+    y += 10;
+    const gstLabel = Number(form.gstPercent) > 0 ? " (Including GST)" : " (Excluding GST)";
+    pdf.text(`Total Amount: Rs ${totalWithGst.toFixed(2)}${gstLabel}`, pageWidth - 12, y, { align: "right" });
 
-// If stamp goes off the page bottom, lift it up
-if (stampY + stampSize > pageHeight - 20) {
-  stampY = pageHeight - stampSize - 20;
-}
+    y += 20;
 
-try {
-  pdf.addImage(stampImage, "PNG", pageWidth - 40, stampY, stampSize, stampSize);
-} catch {}
+    // ============================================================
+    //              PAYMENT TERMS + SIGNATURE (FIXED)
+    // ============================================================
 
-// Signature text below stamp
-pdf.setFont("helvetica", "bold");
-pdf.setFontSize(10);
-pdf.text("Authorized Signature", pageWidth - 45, stampY + stampSize + 6);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Payment Terms:", 10, y);
+    y += 6;
 
-// ---------------------- TERMS & CONDITIONS (BOTTOM LEFT) ----------------------
-pdf.setFont("helvetica", "italic");
-pdf.setFontSize(9);
+    const txt = form.paymentTerms?.trim() || "-";
+    const wrapped = pdf.splitTextToSize(txt, pageWidth - 20);
 
-let termsY = pageHeight - 10;
+    const need = wrapped.length * 6 + 40;
+    const leftSpace = pageHeight - y - BOTTOM_MARGIN;
 
-// If stamp is too low, move terms text up safely
-if (stampY + stampSize + 10 > termsY) {
-  termsY = stampY + stampSize + 15;
-}
+    if (need > leftSpace) {
+      pdf.addPage();
+      addPageHeader();
+      y = HEADER_BOTTOM_Y + 10;
+    }
 
-pdf.text("*Terms and conditions apply", 10, termsY);
+    pdf.setFont("helvetica", "normal");
+    pdf.text(wrapped, 10, y);
 
+    y += wrapped.length * 6 + 4;
 
+    try {
+      pdf.addImage(stampImage, "PNG", pageWidth - 40, y, 25, 25);
+    } catch {}
 
-    pdf.save(`Quotation_${form.clientName}.pdf`);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(10);
+    pdf.text("Authorized Signature", pageWidth - 45, y + 32);
 
-    
+    pdf.save(`Quotation_${form.projectName}.pdf`);
   };
 
-  // UI Styles (unchanged)
+  // ============================================================
+  //                     UI STYLING (UNCHANGED)
+  // ============================================================
+
   const styles = {
-    pageWrapper: { padding: "10px 0" },
-    section: {
-      background: "#fff",
-      padding: "25px",
-      borderRadius: "14px",
-      marginBottom: "25px",
-      border: "1px solid #e5e7eb",
+    pageWrapper: {
+      padding: "25px 20px",
+      maxWidth: "900px",
+      margin: "0 auto",
+      fontFamily: "Inter, sans-serif",
     },
+
+    section: {
+      background: "#ffffff",
+      padding: "26px",
+      borderRadius: "16px",
+      marginBottom: "28px",
+      border: "1px solid #e5e7eb",
+      boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+    },
+
     sectionTitle: {
       fontSize: "20px",
-      fontWeight: "700",
-      marginBottom: "15px",
+      fontWeight: 700,
+      marginBottom: "18px",
       color: "#1f2937",
-      borderLeft: "5px solid #6366f1",
-      paddingLeft: "12px",
+      borderLeft: "6px solid #6366f1",
+      paddingLeft: "14px",
     },
+
+    label: {
+      fontSize: "14px",
+      fontWeight: 600,
+      color: "#374151",
+      marginBottom: "6px",
+      display: "block",
+    },
+
     input: {
       width: "100%",
-      padding: "12px",
-      marginBottom: "14px",
+      padding: "12px 14px",
+      marginBottom: "18px",
       borderRadius: "10px",
       border: "1px solid #d1d5db",
+      background: "#fafafa",
+      fontSize: "15px",
     },
+
     textarea: {
       width: "100%",
-      padding: "12px",
+      padding: "12px 14px",
       borderRadius: "10px",
       border: "1px solid #d1d5db",
-      minHeight: "100px",
+      background: "#fafafa",
+      fontSize: "15px",
+      minHeight: "120px",
+      marginBottom: "18px",
+      resize: "vertical",
     },
-    row: { display: "flex", gap: "12px", marginBottom: "10px" },
+
+    rowGrid: {
+      display: "grid",
+      gridTemplateColumns: "2fr 1fr 1fr 1fr auto",
+      gap: "14px",
+      alignItems: "end",
+      marginBottom: "16px",
+    },
+
+    smallRow: {
+      display: "grid",
+      gridTemplateColumns: "2fr 1fr auto",
+      gap: "14px",
+      alignItems: "end",
+      marginBottom: "16px",
+    },
+
     deleteBtn: {
       background: "#ef4444",
-      color: "#fff",
-      padding: "8px 12px",
-      borderRadius: "6px",
+      padding: "10px",
+      borderRadius: "10px",
       border: "none",
       cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
     },
+
     buttonAdd: {
       background: "#4f46e5",
-      color: "white",
-      padding: "10px 14px",
-      borderRadius: "8px",
+      color: "#fff",
+      padding: "10px 16px",
+      borderRadius: "10px",
       border: "none",
       cursor: "pointer",
-      marginTop: "10px",
+      fontWeight: 600,
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      width: "fit-content",
+    },
+
+    submitBtn: {
+      width: "100%",
+      background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+      color: "#fff",
+      padding: "18px",
+      borderRadius: "14px",
+      border: "none",
+      cursor: "pointer",
+      fontSize: "20px",
+      fontWeight: "700",
+      marginTop: "30px",
+      boxShadow: "0 8px 20px rgba(79,70,229,0.3)",
+      transition: "0.2s ease",
     },
   };
+
+  // ============================================================
+  //                    FULL UI RETURN (UNCHANGED)
+  // ============================================================
 
   return (
     <div style={styles.pageWrapper}>
-      {/* Company Section */}
+
+      {/* COMPANY DETAILS */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Company Details</h3>
-        <input name="companyName" placeholder="Company Name" style={styles.input} onChange={updateField} />
-        <input name="companyAddress" placeholder="Address" style={styles.input} onChange={updateField} />
-        <input name="companyEmail" placeholder="Email" style={styles.input} onChange={updateField} />
-        <input name="companyPhone" placeholder="Phone" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Company Name</label>
+        <input name="companyName" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Address</label>
+        <input name="companyAddress" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Email</label>
+        <input name="companyEmail" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Phone</label>
+        <input name="companyPhone" style={styles.input} onChange={updateField} />
       </div>
 
-      {/* Client Section */}
+      {/* CLIENT DETAILS */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Client Details</h3>
-        <input name="clientName" placeholder="Client Name" style={styles.input} onChange={updateField} />
-        <input name="clientEmail" placeholder="Client Email" style={styles.input} onChange={updateField} />
-        <input name="clientPhone" placeholder="Client Phone" style={styles.input} onChange={updateField} />
-        <input name="projectName" placeholder="Project Name" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Client Name</label>
+        <input name="clientName" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Client Email</label>
+        <input name="clientEmail" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Client Phone</label>
+        <input name="clientPhone" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Project Name</label>
+        <input name="projectName" style={styles.input} onChange={updateField} />
       </div>
 
-      {/* Project Info */}
+      {/* PROJECT INFO */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Project Information</h3>
+
+        <label style={styles.label}>Project Category</label>
         <select name="projectCategory" style={styles.input} onChange={updateField}>
           <option value="">Select Category</option>
           <option value="Mobile Application">Mobile Application</option>
@@ -325,117 +501,146 @@ pdf.text("*Terms and conditions apply", 10, termsY);
           <option value="Custom Software">Custom Software</option>
         </select>
 
-        <input name="projectType" placeholder="Project Type" style={styles.input} onChange={updateField} />
+        <label style={styles.label}>Project Type</label>
+        <input name="projectType" style={styles.input} onChange={updateField} />
       </div>
 
-      {/* Development Costs */}
+      {/* DEVELOPMENT COSTS */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Development Costs</h3>
 
         {form.development.map((row, i) => (
-          <div key={i} style={styles.row}>
+          <div key={i} style={styles.rowGrid}>
+
             <input
               placeholder="Description"
               value={row.label}
               style={styles.input}
               onChange={(e) => updateRow("development", i, "label", e.target.value)}
             />
+
             <input
               placeholder="Cost"
               value={row.cost}
               style={styles.input}
               onChange={(e) => updateRow("development", i, "cost", e.target.value)}
             />
-            <button style={styles.deleteBtn} onClick={() => deleteRow("development", i)}>🗑️</button>
+
+            <input
+              placeholder="Hours"
+              value={row.hours}
+              style={styles.input}
+              onChange={(e) => updateRow("development", i, "hours", e.target.value)}
+            />
+
+            <input
+              placeholder="Rate/hr"
+              value={row.rate}
+              style={styles.input}
+              onChange={(e) => updateRow("development", i, "rate", e.target.value)}
+            />
+
+            <button style={styles.deleteBtn} onClick={() => deleteRow("development", i)}>
+              <Trash2 size={18} color="#fff" />
+            </button>
+
           </div>
         ))}
 
-        <button style={styles.buttonAdd} onClick={() => addRow("development", { label: "", cost: "" })}>
-          + Add Development Item
+        <button
+          style={styles.buttonAdd}
+          onClick={() => addRow("development", { label: "", cost: "" })}
+        >
+          <PlusCircle size={18} /> Add Development Item
         </button>
       </div>
 
-      {/* User Pricing */}
+      {/* USER PRICING */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>User Pricing</h3>
 
         {form.users.map((row, i) => (
-          <div key={i} style={styles.row}>
+          <div key={i} style={styles.smallRow}>
             <input
               placeholder="No. of Users"
               value={row.count}
               style={styles.input}
               onChange={(e) => updateRow("users", i, "count", e.target.value)}
             />
+
             <input
-              placeholder="Cost Per User"
+              placeholder="Cost/User"
               value={row.price}
               style={styles.input}
               onChange={(e) => updateRow("users", i, "price", e.target.value)}
             />
-            <button style={styles.deleteBtn} onClick={() => deleteRow("users", i)}>🗑️</button>
+
+            <button style={styles.deleteBtn} onClick={() => deleteRow("users", i)}>
+              <Trash2 size={18} color="#fff" />
+            </button>
           </div>
         ))}
 
-        <button style={styles.buttonAdd} onClick={() => addRow("users", { count: "", price: "" })}>
-          + Add User Pricing
+        <button
+          style={styles.buttonAdd}
+          onClick={() => addRow("users", { count: "", price: "" })}
+        >
+          <PlusCircle size={18} /> Add User Pricing
         </button>
       </div>
 
-      {/* Additional Costs */}
+      {/* ADDITIONAL COSTS */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Additional Costs</h3>
 
         {form.additionalCosts.map((row, i) => (
-          <div key={i} style={styles.row}>
+          <div key={i} style={styles.smallRow}>
             <input
               placeholder="Description"
               value={row.label}
               style={styles.input}
               onChange={(e) => updateRow("additionalCosts", i, "label", e.target.value)}
             />
+
             <input
               placeholder="Cost"
               value={row.cost}
               style={styles.input}
               onChange={(e) => updateRow("additionalCosts", i, "cost", e.target.value)}
             />
-            <button style={styles.deleteBtn} onClick={() => deleteRow("additionalCosts", i)}>🗑️</button>
+
+            <button style={styles.deleteBtn} onClick={() => deleteRow("additionalCosts", i)}>
+              <Trash2 size={18} color="#fff" />
+            </button>
           </div>
         ))}
 
-        <button style={styles.buttonAdd} onClick={() => addRow("additionalCosts", { label: "", cost: "" })}>
-          + Add Additional Cost
+        <button
+          style={styles.buttonAdd}
+          onClick={() => addRow("additionalCosts", { label: "", cost: "" })}
+        >
+          <PlusCircle size={18} /> Add Additional Cost
         </button>
       </div>
 
-      {/* GST & Terms */}
+      {/* GST & TERMS */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>GST & Payment Terms</h3>
-        <input name="gstPercent" placeholder="GST %" style={styles.input} onChange={updateField} />
-        <textarea
-          name="paymentTerms"
-          placeholder="Payment Terms"
-          style={styles.textarea}
-          onChange={updateField}
-        ></textarea>
+
+        <label style={styles.label}>GST Percentage</label>
+        <input name="gstPercent" style={styles.input} onChange={updateField} />
+
+        <label style={styles.label}>Payment Terms</label>
+        <textarea name="paymentTerms" style={styles.textarea} onChange={updateField}></textarea>
       </div>
 
       <button
-        style={{
-          width: "100%",
-          background: "#4f46e5",
-          color: "white",
-          padding: "15px",
-          borderRadius: "10px",
-          border: "none",
-          cursor: "pointer",
-          fontSize: "18px",
-        }}
+        style={styles.submitBtn}
         onClick={downloadPDF}
       >
         Generate PDF
       </button>
+
     </div>
   );
 }

@@ -17,11 +17,11 @@ export default function App() {
     projectType: "",
     projectOverview: "",
 
-    development: [{ label: "", cost: "" }],
+    development: [{ label: "", cost: "",hours: "",rate: "" }],
     users: [{ count: "", price: "" }],
     additionalCosts: [{ label: "", cost: "" }],
 
-    gstPercent: "18",
+    gstPercent: "",
     paymentTerms: "",
     quotationNumber: "",
   });
@@ -84,10 +84,11 @@ export default function App() {
     },
 
     previewContainer: {
-      width: "480px",
-      transform: "scale(0.78)",
-      transformOrigin: "top right",
-    },
+  width: "560px",          // ⬅ increase width
+  transform: "scale(0.90)", // ⬅ make preview bigger
+  transformOrigin: "top right",
+},
+
 
     stickyPreview: {
       position: "sticky",
