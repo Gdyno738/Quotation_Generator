@@ -67,8 +67,6 @@ export default function QuotationForm({ form, setForm }) {
     }
   }, []);
 
- 
-
   const downloadPDF = () => {
     const pdf = new jsPDF("p", "mm", "a4");
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -230,25 +228,20 @@ export default function QuotationForm({ form, setForm }) {
     pdf.text(
       `Total Amount : INR ${totalWithGst.toFixed(2)}${gstLabel}`,
       pageWidth - 12,
-      y + 17,   
+      y + 17,
       { align: "right" }
     );
 
     y += 28;
 
-    // ---------------- PAYMENT TERMS ----------------
-    // ensureSpace(20);
-    // pdf.setFont("helvetica", "normal");
-    // pdf.setFontSize(11);
-    // pdf.text(`Payment Terms: ${form.paymentTerms}`, 10, y);
-
-    // y += 20;
-    ensureSpace(20);
+    // ---------------- PAYMENT TERMS (LEFT) + STAMP & SIGNATURE (RIGHT) ----------------
+    ensureSpace(30);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(11);
 
-    let paymentY = y + 15;
+    let paymentY = y;
 
+    // LEFT SIDE - PAYMENT TERMS
     pdf.text("PAYMENT TERMS :", 10, paymentY);
 
     let lines = form.paymentTerms.split("\n");
@@ -257,21 +250,28 @@ export default function QuotationForm({ form, setForm }) {
       pdf.text(line, 10, paymentY + 6 * (index + 1));
     });
 
-    // ---------------- STAMP + SIGNATURE ----------------
-    ensureSpace(40);
+    // Calculate position after payment terms
+    let termsStartY = paymentY + 6 * (lines.length + 1) + 5;
 
-    pdf.addImage(stampImage, "PNG", pageWidth - 40, y, 25, 25);
+    // Terms & conditions on left side
+    pdf.setFont("helvetica", "italic");
+    pdf.setFontSize(9);
+    pdf.text("**Terms and conditions apply", 10, termsStartY);
+
+    // RIGHT SIDE - STAMP + SIGNATURE
+    const stampSize = 25;
+    const stampX = pageWidth - 40;
+    const stampY = paymentY;
+
+    try {
+      pdf.addImage(stampImage, "PNG", stampX, stampY, stampSize, stampSize);
+    } catch (error) {
+      console.log("Stamp image not found");
+    }
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(10);
-    pdf.text("Authorized Signature", pageWidth - 45, y + 34);
-
-    y += 45;
-
-    // ---------------- TERMS & CONDITIONS ----------------
-    pdf.setFont("helvetica", "italic");
-    pdf.setFontSize(9);
-    pdf.text("*Terms and conditions apply", 10, pageHeight - 10);
+    pdf.text("Authorized Signature", stampX - 10, stampY + stampSize + 8);
 
     pdf.save(`Quotation_${form.clientName}.pdf`);
   };

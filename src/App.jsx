@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import QuotationForm from "./components/QuotationForm";
 import QuotationPreview from "./components/QuotationPreview";
+import ViewDetails from "./components/ViewDetails";
 
 export default function App() {
   const [form, setForm] = useState({
@@ -25,6 +26,8 @@ export default function App() {
     paymentTerms: "",
     quotationNumber: "",
   });
+
+  const [currentView, setCurrentView] = useState("form"); // 'form' or 'viewDetails'
 
   // ------------------ MODERN UI STYLES ------------------
   const styles = {
@@ -110,25 +113,58 @@ export default function App() {
   return (
     <div style={styles.page}>
       <div style={styles.container}>
-        <h1 style={styles.title}>Quotation Generator</h1>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "50px",
+          }}
+        >
+          <h1 style={styles.title}>Quotation Generator</h1>
+          <button
+            onClick={() => setCurrentView("viewDetails")}
+            style={{
+              padding: "12px 24px",
+              background: "#8b5cf6",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "16px",
+              fontWeight: "600",
+              transition: "background 0.3s",
+            }}
+            onMouseEnter={(e) => (e.target.style.background = "#7c3aed")}
+            onMouseLeave={(e) => (e.target.style.background = "#8b5cf6")}
+          >
+            👁️ View Details
+          </button>
+        </div>
 
-        {/* Responsive Layout */}
-        <div style={isLargeScreen ? styles.layoutLarge : styles.layout}>
-          {/* LEFT COLUMN — FORM */}
-          <div style={{ ...styles.card, ...styles.formBox }}>
-            <QuotationForm form={form} setForm={setForm} />
-          </div>
+        {currentView === "form" ? (
+          <>
+            {/* Responsive Layout */}
+            <div style={isLargeScreen ? styles.layoutLarge : styles.layout}>
+              {/* LEFT COLUMN — FORM */}
+              <div style={{ ...styles.card, ...styles.formBox }}>
+                <QuotationForm form={form} setForm={setForm} />
+              </div>
 
-          {/* RIGHT COLUMN — PREVIEW */}
-          <div style={styles.previewWrapper}>
-            <div style={styles.previewContainer}>
-              <div style={{ ...styles.card, ...styles.stickyPreview }}>
-                <h2 style={styles.previewTitle}>Quotation Preview</h2>
-                <QuotationPreview form={form} />
+              {/* RIGHT COLUMN — PREVIEW */}
+              <div style={styles.previewWrapper}>
+                <div style={styles.previewContainer}>
+                  <div style={{ ...styles.card, ...styles.stickyPreview }}>
+                    <h2 style={styles.previewTitle}>Quotation Preview</h2>
+                    <QuotationPreview form={form} />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        ) : (
+          <ViewDetails onBack={() => setCurrentView("form")} />
+        )}
       </div>
     </div>
   );
