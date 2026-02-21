@@ -4,20 +4,45 @@ import stampImage from "../assets/stamp.jpg";
 export default function QuotationPreview({ form }) {
   const quotationNumber = form.quotationNumber || "Not generated";
 
-  const devTotal = form.development.reduce(
-    (sum, row) => sum + Number(row.cost || 0),
-    0
-  );
+  const parseNumber = (val) => {
+    if (typeof val === "number") return val;
+    if (!val && val !== 0) return 0;
+    const s = String(val).replace(/[\,\s\u20B9]/g, "");
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
+  };
 
-  const usersTotal = form.users.reduce(
-    (sum, row) => sum + Number(row.count || 0) * Number(row.price || 0),
-    0
-  );
+  const devTotal = form.development.reduce((sum, row) => {
+    // Skip if row has no label/description
+    if (!row.label || row.label.trim() === "") return sum;
+    const fixed = parseNumber(row.cost);
+    const hourly = parseNumber(row.hours) * parseNumber(row.rate);
+    // Skip if both cost and hourly are 0
+    if (fixed === 0 && hourly === 0) return sum;
+    const total = fixed > 0 ? fixed : hourly;
+    return sum + total;
+  }, 0);
 
-  const additionalTotal = form.additionalCosts.reduce(
-    (sum, row) => sum + Number(row.cost || 0),
-    0
-  );
+  const usersTotal = form.users.reduce((sum, row) => {
+    // Skip if not enabled
+    if (row.enabled === false) return sum;
+    const count = parseNumber(row.count);
+    const price = parseNumber(row.price);
+    // Skip if count or price is 0
+    if (count === 0 || price === 0) return sum;
+    return sum + count * price;
+  }, 0);
+
+  const additionalTotal = form.additionalCosts.reduce((sum, row) => {
+    // Skip if not enabled
+    if (!row.enabled) return sum;
+    // Skip if row has no label/description
+    if (!row.label || row.label.trim() === "") return sum;
+    const cost = parseNumber(row.cost);
+    // Skip if cost is 0
+    if (cost === 0) return sum;
+    return sum + cost;
+  }, 0);
 
   const subtotal = devTotal + usersTotal + additionalTotal;
   const gst = (subtotal * Number(form.gstPercent || 0)) / 100;
@@ -75,25 +100,29 @@ export default function QuotationPreview({ form }) {
       <h3>User Pricing</h3>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <tbody>
-          {form.users.map((row, i) => (
-            <tr key={i}>
-              <td>{row.count} Users</td>
-              <td>{row.price} each</td>
-              <td>{Number(row.count) * Number(row.price)}</td>
-            </tr>
-          ))}
+          {form.users
+            .filter((row) => row.enabled !== false)
+            .map((row, i) => (
+              <tr key={i}>
+                <td>{row.count} Users</td>
+                <td>{row.price} each</td>
+                <td>{parseNumber(row.count) * parseNumber(row.price)}</td>
+              </tr>
+            ))}
         </tbody>
       </table>
 
       <h3>Additional Costs</h3>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <tbody>
-          {form.additionalCosts.map((row, i) => (
-            <tr key={i}>
-              <td>{row.label}</td>
-              <td>{row.cost}</td>
-            </tr>
-          ))}
+          {form.additionalCosts
+            .filter((row) => row.enabled)
+            .map((row, i) => (
+              <tr key={i}>
+                <td>{row.label}</td>
+                <td>{row.cost}</td>
+              </tr>
+            ))}
         </tbody>
       </table>
 

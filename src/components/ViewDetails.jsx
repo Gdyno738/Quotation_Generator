@@ -1,22 +1,24 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { jsPDF } from "jspdf";
 
 export default function ViewDetails({ onBack }) {
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [pdfToggle, setPdfToggle] = useState({
+    userPricing: true,
+    additionalCosts: true,
+    development: true,
+  });
 
   // Fetch all quotations
-  useEffect(() => {
-    fetchQuotations();
-  }, []);
-
   const fetchQuotations = async () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        "http://localhost:7070/api/quotations/all" // Update with your Java backend URL
+        "http://localhost:7070/api/quotations/all", // Update with your Java backend URL
       );
       setQuotations(response.data);
       setLoading(false);
@@ -26,6 +28,12 @@ export default function ViewDetails({ onBack }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    (async () => {
+      await fetchQuotations();
+    })();
+  }, []);
 
   // Fetch single quotation by id and open modal
   const handleViewDetails = async (id) => {
@@ -43,7 +51,7 @@ export default function ViewDetails({ onBack }) {
     if (window.confirm("Are you sure you want to delete this quotation?")) {
       try {
         const response = await axios.delete(
-          `http://localhost:7070/api/quotations/${id}` // Update with your Java backend URL
+          `http://localhost:7070/api/quotations/${id}`, // Update with your Java backend URL
         );
         if (response.status === 200) {
           alert("✅ Quotation deleted successfully!");
@@ -67,6 +75,183 @@ export default function ViewDetails({ onBack }) {
       console.error("Failed parsing field:", e);
       return [];
     }
+  };
+
+  // Generate PDF with selected sections
+  const generatePDF = () => {
+    if (!selectedQuotation) return;
+
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    // Use toggle states from database or fallback to local state
+    const showDevelopment =
+      selectedQuotation.showDevelopmentInPDF !== false && pdfToggle.development;
+    const showUserPricing =
+      selectedQuotation.showUserPricingInPDF !== false && pdfToggle.userPricing;
+    const showAdditionalCosts =
+      selectedQuotation.showAdditionalCostsInPDF !== false &&
+      pdfToggle.additionalCosts;
+
+    let y = 40;
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(18);
+    pdf.text("QUOTATION", pageWidth / 2, 20, { align: "center" });
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(11);
+
+    // Company Details
+    pdf.setFont("helvetica", "bold");
+    pdf.text("COMPANY DETAILS", 10, y);
+    y += 8;
+
+    pdf.setFont("helvetica", "normal");
+    pdf.text(`Company: ${selectedQuotation.companyName || "-"}`, 10, y);
+    y += 6;
+    pdf.text(`Address: ${selectedQuotation.companyAddress || "-"}`, 10, y);
+    y += 6;
+    pdf.text(`Email: ${selectedQuotation.companyEmail || "-"}`, 10, y);
+    y += 6;
+    pdf.text(`Phone: ${selectedQuotation.companyPhone || "-"}`, 10, y);
+    y += 12;
+
+    // Client Details
+    pdf.setFont("helvetica", "bold");
+    pdf.text("CLIENT DETAILS", 10, y);
+    y += 8;
+
+    pdf.setFont("helvetica", "normal");
+    pdf.text(`Client: ${selectedQuotation.clientName || "-"}`, 10, y);
+    y += 6;
+    pdf.text(`Email: ${selectedQuotation.clientEmail || "-"}`, 10, y);
+    y += 6;
+    pdf.text(`Phone: ${selectedQuotation.clientPhone || "-"}`, 10, y);
+    y += 6;
+    pdf.text(`Project: ${selectedQuotation.projectName || "-"}`, 10, y);
+    y += 12;
+
+    // Development Costs
+    if (showDevelopment && selectedQuotation.development) {
+      const devData = parseField(selectedQuotation.development);
+      if (devData.length > 0) {
+        if (y > pageHeight - 50) {
+          pdf.addPage();
+          y = 20;
+        }
+
+        pdf.setFont("helvetica", "bold");
+        pdf.text("DEVELOPMENT COSTS", 10, y);
+        y += 10;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+
+        devData.forEach((item) => {
+          if (y > pageHeight - 20) {
+            pdf.addPage();
+            y = 20;
+          }
+          pdf.text(`${item.label}: INR ${item.cost || 0}`, 15, y);
+          y += 6;
+        });
+        y += 6;
+      }
+    }
+
+    // User Pricing
+    if (showUserPricing && selectedQuotation.users) {
+      const usersData = parseField(selectedQuotation.users);
+      if (usersData.length > 0) {
+        if (y > pageHeight - 50) {
+          pdf.addPage();
+          y = 20;
+        }
+
+        pdf.setFont("helvetica", "bold");
+        pdf.text("USER PRICING", 10, y);
+        y += 10;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+
+        usersData.forEach((item) => {
+          if (y > pageHeight - 20) {
+            pdf.addPage();
+            y = 20;
+          }
+          pdf.text(`${item.count} Users - INR ${item.price || 0}`, 15, y);
+          y += 6;
+        });
+        y += 6;
+      }
+    }
+
+    // Additional Costs
+    if (showAdditionalCosts && selectedQuotation.additionalCosts) {
+      const additionalData = parseField(selectedQuotation.additionalCosts);
+      if (additionalData.length > 0) {
+        if (y > pageHeight - 50) {
+          pdf.addPage();
+          y = 20;
+        }
+
+        pdf.setFont("helvetica", "bold");
+        pdf.text("ADDITIONAL COSTS", 10, y);
+        y += 10;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+
+        additionalData.forEach((item) => {
+          if (y > pageHeight - 20) {
+            pdf.addPage();
+            y = 20;
+          }
+          pdf.text(`${item.label}: INR ${item.cost || 0}`, 15, y);
+          y += 6;
+        });
+        y += 6;
+      }
+    }
+
+    // Financial Summary
+    if (y > pageHeight - 50) {
+      pdf.addPage();
+      y = 20;
+    }
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(11);
+    pdf.text("FINANCIAL SUMMARY", 10, y);
+    y += 10;
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    pdf.text(
+      `Subtotal: INR ${(selectedQuotation.subtotal || 0).toFixed(2)}`,
+      10,
+      y,
+    );
+    y += 6;
+    pdf.text(
+      `GST (${selectedQuotation.gstPercent}%): INR ${(selectedQuotation.gstAmount || 0).toFixed(2)}`,
+      10,
+      y,
+    );
+    y += 6;
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
+    pdf.text(
+      `Total Amount: INR ${(selectedQuotation.totalAmount || 0).toFixed(2)}`,
+      10,
+      y,
+    );
+
+    pdf.save(`Quotation_${selectedQuotation.clientName}.pdf`);
   };
 
   const styles = {
@@ -210,6 +395,30 @@ export default function ViewDetails({ onBack }) {
       fontSize: "18px",
       color: "#9ca3af",
     },
+    toggleButton: {
+      padding: "6px 14px",
+      border: "none",
+      borderRadius: "6px",
+      cursor: "pointer",
+      fontSize: "12px",
+      fontWeight: "600",
+      marginLeft: "10px",
+      transition: "all 0.2s",
+    },
+    toggleOn: {
+      background: "#10b981",
+      color: "white",
+    },
+    toggleOff: {
+      background: "#ef4444",
+      color: "white",
+    },
+    sectionHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "10px",
+    },
   };
 
   if (loading) {
@@ -330,7 +539,25 @@ export default function ViewDetails({ onBack }) {
               {/* Development Costs */}
               {selectedQuotation.development && (
                 <div style={styles.detailSection}>
-                  <div style={styles.detailTitle}>💻 Development Costs</div>
+                  <div style={styles.sectionHeader}>
+                    <div style={styles.detailTitle}>💻 Development Costs</div>
+                    <button
+                      style={{
+                        ...styles.toggleButton,
+                        ...(pdfToggle.development
+                          ? styles.toggleOn
+                          : styles.toggleOff),
+                      }}
+                      onClick={() =>
+                        setPdfToggle((prev) => ({
+                          ...prev,
+                          development: !prev.development,
+                        }))
+                      }
+                    >
+                      {pdfToggle.development ? "✓ ON" : "✗ OFF"}
+                    </button>
+                  </div>
                   <table style={styles.table2}>
                     <thead>
                       <tr>
@@ -349,7 +576,7 @@ export default function ViewDetails({ onBack }) {
                             <td style={styles.td2}>{item.hours}</td>
                             <td style={styles.td2}>{item.rate}</td>
                           </tr>
-                        )
+                        ),
                       )}
                     </tbody>
                   </table>
@@ -359,7 +586,25 @@ export default function ViewDetails({ onBack }) {
               {/* User Pricing */}
               {selectedQuotation.users && (
                 <div style={styles.detailSection}>
-                  <div style={styles.detailTitle}>👥 User Pricing</div>
+                  <div style={styles.sectionHeader}>
+                    <div style={styles.detailTitle}>👥 User Pricing</div>
+                    <button
+                      style={{
+                        ...styles.toggleButton,
+                        ...(pdfToggle.userPricing
+                          ? styles.toggleOn
+                          : styles.toggleOff),
+                      }}
+                      onClick={() =>
+                        setPdfToggle((prev) => ({
+                          ...prev,
+                          userPricing: !prev.userPricing,
+                        }))
+                      }
+                    >
+                      {pdfToggle.userPricing ? "✓ ON" : "✗ OFF"}
+                    </button>
+                  </div>
                   <table style={styles.table2}>
                     <thead>
                       <tr>
@@ -382,7 +627,25 @@ export default function ViewDetails({ onBack }) {
               {/* Additional Costs */}
               {selectedQuotation.additionalCosts && (
                 <div style={styles.detailSection}>
-                  <div style={styles.detailTitle}>💰 Additional Costs</div>
+                  <div style={styles.sectionHeader}>
+                    <div style={styles.detailTitle}>💰 Additional Costs</div>
+                    <button
+                      style={{
+                        ...styles.toggleButton,
+                        ...(pdfToggle.additionalCosts
+                          ? styles.toggleOn
+                          : styles.toggleOff),
+                      }}
+                      onClick={() =>
+                        setPdfToggle((prev) => ({
+                          ...prev,
+                          additionalCosts: !prev.additionalCosts,
+                        }))
+                      }
+                    >
+                      {pdfToggle.additionalCosts ? "✓ ON" : "✗ OFF"}
+                    </button>
+                  </div>
                   <table style={styles.table2}>
                     <thead>
                       <tr>
@@ -397,7 +660,7 @@ export default function ViewDetails({ onBack }) {
                             <td style={styles.td2}>{item.label}</td>
                             <td style={styles.td2}>{item.cost}</td>
                           </tr>
-                        )
+                        ),
                       )}
                     </tbody>
                   </table>
@@ -436,12 +699,28 @@ export default function ViewDetails({ onBack }) {
                 </div>
               </div>
 
-              <div style={{ marginTop: "20px" }}>
+              <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
                 <button
                   style={{
-                    width: "100%",
+                    flex: 1,
                     padding: "12px",
                     background: "#6366f1",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                  }}
+                  onClick={generatePDF}
+                >
+                  📥 Download PDF
+                </button>
+                <button
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    background: "#9ca3af",
                     color: "white",
                     border: "none",
                     borderRadius: "8px",

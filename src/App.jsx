@@ -19,12 +19,17 @@ export default function App() {
     projectOverview: "",
 
     development: [{ label: "", cost: "", hours: "", rate: "" }],
-    users: [{ count: "", price: "" }],
-    additionalCosts: [{ label: "", cost: "" }],
+    users: [{ count: "", price: "", enabled: true }],
+    additionalCosts: [{ label: "", cost: "", enabled: true }],
 
     gstPercent: "18",
     paymentTerms: "",
     quotationNumber: "",
+
+    // PDF toggle states
+    showUserPricingInPDF: true,
+    showAdditionalCostsInPDF: true,
+    showDevelopmentInPDF: true,
   });
 
   const [currentView, setCurrentView] = useState("form"); // 'form' or 'viewDetails'
