@@ -15,6 +15,14 @@ export default function QuotationForm({ form, setForm }) {
     setForm((prev) => ({ ...prev, [section]: updated }));
   };
 
+  const parseNumber = (val) => {
+    if (typeof val === "number") return val;
+    if (!val && val !== 0) return 0;
+    const s = String(val).replace(/[\,\s\u20B9]/g, "");
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+
   const addRow = (section, rowObj) => {
     setForm((prev) => ({
       ...prev,
@@ -28,21 +36,36 @@ export default function QuotationForm({ form, setForm }) {
   };
 
   const devTotal = form.development.reduce((sum, row) => {
-    const fixed = Number(row.cost || 0);
-    const hourly = Number(row.hours || 0) * Number(row.rate || 0);
+    // Skip if row has no label/description
+    if (!row.label || row.label.trim() === "") return sum;
+    const fixed = parseNumber(row.cost);
+    const hourly = parseNumber(row.hours) * parseNumber(row.rate);
+    // Skip if both cost and hourly are 0
+    if (fixed === 0 && hourly === 0) return sum;
     const total = fixed > 0 ? fixed : hourly;
     return sum + total;
   }, 0);
 
-  const usersTotal = form.users.reduce(
-    (sum, row) => Number(row.count || 0) * Number(row.price || 0) + sum,
-    0
-  );
+  const usersTotal = form.users.reduce((sum, row) => {
+    // Skip if not enabled
+    if (row.enabled === false) return sum;
+    const count = parseNumber(row.count);
+    const price = parseNumber(row.price);
+    // Skip if count or price is 0
+    if (count === 0 || price === 0) return sum;
+    return sum + count * price;
+  }, 0);
 
-  const additionalTotal = form.additionalCosts.reduce(
-    (sum, row) => sum + Number(row.cost || 0),
-    0
-  );
+  const additionalTotal = form.additionalCosts.reduce((sum, row) => {
+    // Skip if not enabled
+    if (!row.enabled) return sum;
+    // Skip if row has no label/description
+    if (!row.label || row.label.trim() === "") return sum;
+    const cost = parseNumber(row.cost);
+    // Skip if cost is 0
+    if (cost === 0) return sum;
+    return sum + cost;
+  }, 0);
 
   const grandSubtotal = devTotal + usersTotal + additionalTotal;
   const gst = (grandSubtotal * Number(form.gstPercent || 0)) / 100;
@@ -52,9 +75,9 @@ export default function QuotationForm({ form, setForm }) {
     const now = new Date();
     return `QTN-${now.getFullYear()}${String(now.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}${String(now.getDate()).padStart(2, "0")}-${Math.floor(
-      1000 + Math.random() * 9000
+      1000 + Math.random() * 9000,
     )}`;
   };
 
@@ -65,6 +88,7 @@ export default function QuotationForm({ form, setForm }) {
         quotationNumber: generateQuotationNumber(),
       }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const downloadPDF = () => {
@@ -146,65 +170,97 @@ export default function QuotationForm({ form, setForm }) {
     pdf.text(`Project Category : ${form.projectCategory || "-"}`, 10, y);
     y += 6;
     pdf.text(`Project Type : ${form.projectType || "-"}`, 10, y);
-    y += 10;
+    y += 6;
+    y += 6;
 
     // ---------------- DEVELOPMENT TABLE ----------------
-    ensureSpace(20);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("DEVELOPMENT COSTS", 10, y);
+    if (form.showDevelopmentInPDF) {
+      ensureSpace(50);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("DEVELOPMENT COSTS", 10, y);
 
-    autoTable(pdf, {
-      startY: y + 4,
-      head: [["TASK", "COST", "HOURS", "RATE", "TOTAL"]],
-      body: form.development.map((row) => {
-        const fixed = Number(row.cost || 0);
-        const hourly = Number(row.hours || 0) * Number(row.rate || 0);
-        const total = fixed > 0 ? fixed : hourly;
+      const startYDev = y + 8;
+      autoTable(pdf, {
+        startY: startYDev,
+        head: [["TASK", "COST", "HOURS", "RATE", "TOTAL"]],
+        body: form.development.map((row) => {
+          const fixed = Number(row.cost || 0);
+          const hourly = Number(row.hours || 0) * Number(row.rate || 0);
+          const total = fixed > 0 ? fixed : hourly;
 
-        return [
-          row.label,
-          row.cost || "-",
-          row.hours || "-",
-          row.rate || "-",
-          total,
-        ];
-      }),
-      didDrawPage: () => addPageHeader(),
-    });
+          return [
+            row.label,
+            row.cost || "-",
+            row.hours || "-",
+            row.rate || "-",
+            total,
+          ];
+        }),
+        didDrawPage: (data) => {
+          addPageHeader();
+          // Adjust y if page break occurred
+          if (data.pageNumber > 1) {
+            y = 40;
+          }
+        },
+      });
 
-    y = pdf.lastAutoTable.finalY + 10;
+      y = pdf.lastAutoTable.finalY + 15;
+    }
 
-    // ---------------- USER PRICING TABLE ----------------
-    ensureSpace(20);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("USER PRICING", 10, y);
+    // // ---------------- USER PRICING TABLE ----------------
+    if (form.showUserPricingInPDF) {
+      ensureSpace(50);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("USER PRICING", 10, y);
 
-    autoTable(pdf, {
-      startY: y + 4,
-      head: [["USERS", "PRICE", "TOTAL"]],
-      body: form.users.map((row) => [
-        row.count,
-        row.price,
-        Number(row.count) * Number(row.price),
-      ]),
-      didDrawPage: () => addPageHeader(),
-    });
+      const startYUsers = y + 8;
+      autoTable(pdf, {
+        startY: startYUsers,
+        head: [["USERS", "PRICE", "TOTAL"]],
+        body: form.users
+          .filter((row) => row.enabled !== false)
+          .map((row) => [
+            row.count,
+            row.price,
+            parseNumber(row.count) * parseNumber(row.price),
+          ]),
+        didDrawPage: (data) => {
+          addPageHeader();
+          // Adjust y if page break occurred
+          if (data.pageNumber > 1) {
+            y = 40;
+          }
+        },
+      });
 
-    y = pdf.lastAutoTable.finalY + 10;
+      y = pdf.lastAutoTable.finalY + 15;
+    }
 
     // ---------------- ADDITIONAL COSTS TABLE ----------------
-    ensureSpace(20);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("ADDITIONAL COSTS", 10, y);
+    if (form.showAdditionalCostsInPDF) {
+      ensureSpace(50);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("ADDITIONAL COSTS", 10, y);
 
-    autoTable(pdf, {
-      startY: y + 4,
-      head: [["Description", "Cost"]],
-      body: form.additionalCosts.map((row) => [row.label, row.cost]),
-      didDrawPage: () => addPageHeader(),
-    });
+      const startYAdditional = y + 8;
+      autoTable(pdf, {
+        startY: startYAdditional,
+        head: [["Description", "Cost"]],
+        body: form.additionalCosts
+          .filter((row) => row.enabled)
+          .map((row) => [row.label, row.cost]),
+        didDrawPage: (data) => {
+          addPageHeader();
+          // Adjust y if page break occurred
+          if (data.pageNumber > 1) {
+            y = 40;
+          }
+        },
+      });
 
-    y = pdf.lastAutoTable.finalY + 10;
+      y = pdf.lastAutoTable.finalY + 15;
+    }
 
     // ---------------- TOTAL SECTION ----------------
     ensureSpace(40);
@@ -219,7 +275,7 @@ export default function QuotationForm({ form, setForm }) {
       `GST (${form.gstPercent || 0}%) : INR ${gst.toFixed(2)}`,
       pageWidth - 12,
       y + 8,
-      { align: "right" }
+      { align: "right" },
     );
 
     let gstLabel =
@@ -229,7 +285,7 @@ export default function QuotationForm({ form, setForm }) {
       `Total Amount : INR ${totalWithGst.toFixed(2)}${gstLabel}`,
       pageWidth - 12,
       y + 17,
-      { align: "right" }
+      { align: "right" },
     );
 
     y += 28;
@@ -265,7 +321,7 @@ export default function QuotationForm({ form, setForm }) {
 
     try {
       pdf.addImage(stampImage, "PNG", stampX, stampY, stampSize, stampSize);
-    } catch (error) {
+    } catch {
       console.log("Stamp image not found");
     }
 
@@ -316,6 +372,11 @@ export default function QuotationForm({ form, setForm }) {
         totalAmount: totalWithGst,
         paymentTerms: form.paymentTerms,
 
+        // PDF Display Toggles
+        showDevelopmentInPDF: form.showDevelopmentInPDF,
+        showUserPricingInPDF: form.showUserPricingInPDF,
+        showAdditionalCostsInPDF: form.showAdditionalCostsInPDF,
+
         // Add status
         status: "PENDING",
       };
@@ -328,7 +389,7 @@ export default function QuotationForm({ form, setForm }) {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       if (response.status === 200 || response.status === 201) {
@@ -341,11 +402,11 @@ export default function QuotationForm({ form, setForm }) {
         alert(
           `❌ Error: ${
             error.response.data?.message || "Failed to save quotation"
-          }`
+          }`,
         );
       } else {
         alert(
-          "❌ Error connecting to backend. Make sure Java server is running."
+          "❌ Error connecting to backend. Make sure Java server is running.",
         );
       }
     }
@@ -376,6 +437,20 @@ export default function QuotationForm({ form, setForm }) {
       borderRadius: "10px",
       border: "1px solid #d1d5db",
     },
+    inputInline: {
+      flex: 1,
+      padding: "12px",
+      borderRadius: "10px",
+      border: "1px solid #d1d5db",
+      marginBottom: 0,
+    },
+    inputSmall: {
+      width: "170px",
+      padding: "12px",
+      borderRadius: "10px",
+      border: "1px solid #d1d5db",
+      marginBottom: 0,
+    },
     textarea: {
       width: "100%",
       padding: "12px",
@@ -383,14 +458,25 @@ export default function QuotationForm({ form, setForm }) {
       border: "1px solid #d1d5db",
       minHeight: "100px",
     },
-    row: { display: "flex", gap: "12px", marginBottom: "10px" },
+    row: {
+      display: "flex",
+      gap: "12px",
+      marginBottom: "14px",
+      alignItems: "center",
+    },
     deleteBtn: {
       background: "#ef4444",
       color: "#fff",
-      padding: "8px 12px",
-      borderRadius: "6px",
+      padding: 0,
+      width: "40px",
+      height: "40px",
+      borderRadius: "8px",
       border: "none",
       cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "18px",
     },
     buttonAdd: {
       background: "#4f46e5",
@@ -400,6 +486,34 @@ export default function QuotationForm({ form, setForm }) {
       border: "none",
       cursor: "pointer",
       marginTop: "10px",
+    },
+    sectionHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "15px",
+    },
+    toggleButton: {
+      padding: 0,
+      border: "none",
+      borderRadius: "8px",
+      cursor: "pointer",
+      fontSize: "13px",
+      fontWeight: "700",
+      transition: "all 0.15s",
+      width: "72px",
+      height: "40px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    toggleOn: {
+      background: "#10b981",
+      color: "white",
+    },
+    toggleOff: {
+      background: "#ef4444",
+      color: "white",
     },
   };
 
@@ -477,6 +591,7 @@ export default function QuotationForm({ form, setForm }) {
           <option value="Business Website">Business Website</option>
           <option value="Portfolio Website">Portfolio Website</option>
           <option value="Custom Software">Custom Software</option>
+          <option value="Web Application">Web Application</option>
         </select>
 
         <input
@@ -489,7 +604,25 @@ export default function QuotationForm({ form, setForm }) {
 
       {/* Development Costs */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Development Costs</h3>
+        <div style={styles.sectionHeader}>
+          <h3 style={styles.sectionTitle}>Development Costs</h3>
+          <button
+            style={{
+              ...styles.toggleButton,
+              ...(form.showDevelopmentInPDF
+                ? styles.toggleOn
+                : styles.toggleOff),
+            }}
+            onClick={() =>
+              setForm((prev) => ({
+                ...prev,
+                showDevelopmentInPDF: !prev.showDevelopmentInPDF,
+              }))
+            }
+          >
+            {form.showDevelopmentInPDF ? "✓ ON" : "✗ OFF"}
+          </button>
+        </div>
 
         {form.development.map((row, i) => (
           <div
@@ -563,22 +696,49 @@ export default function QuotationForm({ form, setForm }) {
 
       {/* User Pricing */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>User Pricing</h3>
+        <div style={styles.sectionHeader}>
+          <h3 style={styles.sectionTitle}>User Pricing</h3>
+          <button
+            style={{
+              ...styles.toggleButton,
+              ...(form.showUserPricingInPDF
+                ? styles.toggleOn
+                : styles.toggleOff),
+            }}
+            onClick={() =>
+              setForm((prev) => ({
+                ...prev,
+                showUserPricingInPDF: !prev.showUserPricingInPDF,
+              }))
+            }
+          >
+            {form.showUserPricingInPDF ? "✓ ON" : "✗ OFF"}
+          </button>
+        </div>
 
         {form.users.map((row, i) => (
           <div key={i} style={styles.row}>
             <input
               placeholder="No. of Users"
               value={row.count}
-              style={styles.input}
+              style={styles.inputInline}
               onChange={(e) => updateRow("users", i, "count", e.target.value)}
             />
             <input
               placeholder="Cost Per User"
               value={row.price}
-              style={styles.input}
+              style={styles.inputSmall}
               onChange={(e) => updateRow("users", i, "price", e.target.value)}
             />
+            <button
+              style={{
+                ...styles.toggleButton,
+                ...(row.enabled ? styles.toggleOn : styles.toggleOff),
+              }}
+              onClick={() => updateRow("users", i, "enabled", !row.enabled)}
+            >
+              {row.enabled ? "✓ ON" : "✗ OFF"}
+            </button>
             <button
               style={styles.deleteBtn}
               onClick={() => deleteRow("users", i)}
@@ -590,7 +750,9 @@ export default function QuotationForm({ form, setForm }) {
 
         <button
           style={styles.buttonAdd}
-          onClick={() => addRow("users", { count: "", price: "" })}
+          onClick={() =>
+            addRow("users", { count: "", price: "", enabled: true })
+          }
         >
           + Add User Pricing
         </button>
@@ -598,14 +760,32 @@ export default function QuotationForm({ form, setForm }) {
 
       {/* Additional Costs */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Additional Costs</h3>
+        <div style={styles.sectionHeader}>
+          <h3 style={styles.sectionTitle}>Additional Costs</h3>
+          <button
+            style={{
+              ...styles.toggleButton,
+              ...(form.showAdditionalCostsInPDF
+                ? styles.toggleOn
+                : styles.toggleOff),
+            }}
+            onClick={() =>
+              setForm((prev) => ({
+                ...prev,
+                showAdditionalCostsInPDF: !prev.showAdditionalCostsInPDF,
+              }))
+            }
+          >
+            {form.showAdditionalCostsInPDF ? "✓ ON" : "✗ OFF"}
+          </button>
+        </div>
 
         {form.additionalCosts.map((row, i) => (
           <div key={i} style={styles.row}>
             <input
               placeholder="Description"
               value={row.label}
-              style={styles.input}
+              style={styles.inputInline}
               onChange={(e) =>
                 updateRow("additionalCosts", i, "label", e.target.value)
               }
@@ -613,11 +793,22 @@ export default function QuotationForm({ form, setForm }) {
             <input
               placeholder="Cost"
               value={row.cost}
-              style={styles.input}
+              style={styles.inputSmall}
               onChange={(e) =>
                 updateRow("additionalCosts", i, "cost", e.target.value)
               }
             />
+            <button
+              style={{
+                ...styles.toggleButton,
+                ...(row.enabled ? styles.toggleOn : styles.toggleOff),
+              }}
+              onClick={() =>
+                updateRow("additionalCosts", i, "enabled", !row.enabled)
+              }
+            >
+              {row.enabled ? "✓ ON" : "✗ OFF"}
+            </button>
             <button
               style={styles.deleteBtn}
               onClick={() => deleteRow("additionalCosts", i)}
@@ -629,7 +820,9 @@ export default function QuotationForm({ form, setForm }) {
 
         <button
           style={styles.buttonAdd}
-          onClick={() => addRow("additionalCosts", { label: "", cost: "" })}
+          onClick={() =>
+            addRow("additionalCosts", { label: "", cost: "", enabled: true })
+          }
         >
           + Add Additional Cost
         </button>
